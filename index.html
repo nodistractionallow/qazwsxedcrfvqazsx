@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamHub Ultimate V2</title>
+    <style>
+        :root {
+            --bg: #050505; --card-bg: #111; --accent: #e50914; 
+            --text: #fff; --secondary: #aaa; --header-bg: rgba(5,5,5,0.95);
+        }
+
+        body.light-mode {
+            --bg: #f0f2f5; --card-bg: #fff; --text: #0f0f0f; 
+            --secondary: #606060; --header-bg: rgba(255,255,255,0.95);
+        }
+
+        body {
+            background-color: var(--bg); color: var(--text);
+            font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; 
+            user-select: none; transition: background 0.3s, color 0.3s;
+            overflow-x: hidden;
+        }
+
+        /* --- SKELETON LOADING --- */
+        .skeleton { background: linear-gradient(90deg, var(--card-bg) 25%, #333 50%, var(--card-bg) 75%); background-size: 200% 100%; animation: loading 1.5s infinite; }
+        body.light-mode .skeleton { background: linear-gradient(90deg, #e0e0e0 25%, #f5f5f5 50%, #e0e0e0 75%); background-size: 200% 100%; }
+        @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+        /* --- HEADER --- */
+        .header { position: sticky; top: 0; background: var(--header-bg); z-index: 3000; padding: 15px; border-bottom: 1px solid #333; backdrop-filter: blur(10px); }
+        body.light-mode .header { border-bottom: 1px solid #ccc; }
+
+        .search-container { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; align-items: center; max-width: 600px; margin-left: auto; margin-right: auto; }
+        .search-input { width: 100%; padding: 12px 20px; border-radius: 25px; border: 1px solid #444; background: transparent; color: var(--text); outline: none; font-size: 16px; }
+        .search-btn { background: #222; color: white; border: none; padding: 10px 15px; border-radius: 50%; cursor: pointer; font-size: 16px; transition: 0.2s; }
+        .search-btn:hover { background: var(--accent); }
+
+        .category-bar { display: flex; gap: 10px; overflow-x: auto; justify-content: center; scrollbar-width: none; }
+        .category-bar::-webkit-scrollbar { display: none; }
+        .cat-btn { background: var(--card-bg); color: var(--secondary); border: 1px solid #444; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: bold; transition: 0.2s; white-space: nowrap; }
+        .cat-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+        /* --- MAIN GRID --- */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; padding: 20px; max-width: 1400px; margin: 0 auto; }
+        .card { background: var(--card-bg); border-radius: 12px; overflow: hidden; cursor: pointer; transition: transform 0.3s, box-shadow 0.3s; position: relative; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.5); z-index: 10; }
+        body.light-mode .card { border: 1px solid #ddd; }
+        body.light-mode .card:hover { box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .video-prev { width: 100%; aspect-ratio: 16/9; background: #000; }
+        video.mini { width: 100%; height: 100%; object-fit: cover; }
+        .info { padding: 12px; }
+        .title { font-size: 14px; font-weight: bold; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* --- MODAL PLAYER --- */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 2000; overflow-y: auto; padding-top: 80px; }
+        .modal-body { display: flex; flex-direction: column; max-width: 1400px; margin: 0 auto; padding: 20px; gap: 20px; }
+        @media (min-width: 1000px) { .modal-body { flex-direction: row; align-items: flex-start; } }
+        .modal-body.theater { flex-direction: column; max-width: 100%; padding: 0; }
+        .modal-body.theater .main-player-section { width: 100%; height: 80vh; }
+
+        .main-player-section { flex: 3; position: relative; }
+        .player-wrapper { width: 100%; aspect-ratio: 16/9; background: #000; position: relative; border-radius: 8px; overflow: hidden; }
+        #mainVideo { width: 100%; height: 100%; }
+
+        /* BUFFERING */
+        #buffer { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 4px solid rgba(255,255,255,0.3); border-top: 4px solid var(--accent); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; pointer-events: none; z-index: 10; }
+        @keyframes spin { 100% { transform: translate(-50%, -50%) rotate(360deg); } }
+
+        /* SIDEBAR (NOW WITH SEARCH) */
+        .sidebar { flex: 1; display: flex; flex-direction: column; gap: 15px; }
+        .sidebar-search-box { display: flex; gap: 8px; }
+        .sidebar-search-box input { flex: 1; padding: 10px 15px; border-radius: 8px; border: 1px solid #444; background: var(--card-bg); color: var(--text); outline: none; }
+        .sidebar-title { font-size: 18px; font-weight: bold; color: var(--accent); }
+        .side-card { display: flex; gap: 10px; cursor: pointer; transition: 0.2s; }
+        .side-card:hover { opacity: 0.7; }
+        .side-thumb { width: 120px; aspect-ratio: 16/9; background: #222; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
+        .side-thumb video { width: 100%; height: 100%; object-fit: cover; }
+        .side-title { font-size: 13px; font-weight: 600; margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+        /* CONTROLS */
+        .custom-controls { position: absolute; bottom: 0; left: 0; right: 0; padding: 15px; background: linear-gradient(transparent, rgba(0,0,0,0.9)); opacity: 0; transition: 0.3s; z-index: 5; }
+        .player-wrapper:hover .custom-controls { opacity: 1; }
+        .progress-container { width: 100%; height: 5px; background: rgba(255,255,255,0.3); cursor: pointer; margin-bottom: 15px; position: relative; transition: height 0.2s; }
+        .progress-container:hover { height: 8px; }
+        .progress-fill { height: 100%; background: var(--accent); width: 0%; pointer-events: none; }
+        
+        .buttons-row { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
+        .btn { background: none; border: none; color: white; cursor: pointer; font-size: 20px; padding: 0; }
+        .speed-btn { font-size: 13px; font-weight: bold; border: 1px solid white; padding: 2px 6px; border-radius: 4px; }
+        
+        /* CUSTOM CONTEXT MENU */
+        #customMenu { position: absolute; display: none; background: #222; border: 1px solid #444; border-radius: 8px; z-index: 4000; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        #customMenu button { display: block; width: 100%; padding: 12px 20px; background: none; color: white; border: none; text-align: left; cursor: pointer; font-size: 14px; }
+        #customMenu button:hover { background: var(--accent); }
+
+        .seek-overlay { position: absolute; top: 0; width: 30%; height: 100%; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: 0.2s; font-size: 30px; color: white; z-index: 2; background: rgba(255,255,255,0.1); }
+        .close-btn { position: fixed; top: 20px; right: 30px; font-size: 40px; color: var(--text); cursor: pointer; z-index: 3001; }
+    </style>
+</head>
+<body>
+
+    <div id="customMenu">
+        <button onclick="shareVideo()">🔗 Copy Video Link</button>
+        <button onclick="togglePiP()">🖼️ Picture in Picture</button>
+        <button onclick="vid.currentTime = 0">🔄 Restart Video</button>
+    </div>
+
+    <div class="header">
+        <div class="search-container">
+            <input type="text" id="mainSearchBar" class="search-input" placeholder="Search 20+ videos..." onkeyup="if(event.key === 'Enter') updateMainGrid()">
+            <button class="search-btn" onclick="updateMainGrid()" title="Search">🔍</button>
+            <button class="btn" onclick="toggleTheme()" style="color: var(--text); font-size: 24px; margin-left:10px;" title="Dark/Light Mode">🌓</button>
+        </div>
+        <div class="category-bar" id="catBar"></div>
+    </div>
+
+    <div class="grid" id="videoGrid"></div>
+
+    <div id="videoModal" class="modal">
+        <span class="close-btn" onclick="closePlayer()">&times;</span>
+        <div class="modal-body" id="modalBody">
+            <div class="main-player-section">
+                <div class="player-wrapper" id="pWrapper" oncontextmenu="showMenu(event)">
+                    <video id="mainVideo" playsinline></video>
+                    <div id="buffer"></div>
+                    <div id="seekLeft" class="seek-overlay" style="left:0">⏪ 10s</div>
+                    <div id="seekRight" class="seek-overlay" style="right:0">10s ⏩</div>
+                    
+                    <div class="custom-controls">
+                        <div class="progress-container" id="pContainer"><div class="progress-fill" id="pFill"></div></div>
+                        <div class="buttons-row">
+                            <button class="btn" onclick="togglePlay()" id="playBtn">▶</button>
+                            
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <button class="btn" onclick="toggleMute()" id="muteBtn" style="font-size: 16px;">🔊</button>
+                                <input type="range" id="volSlider" min="0" max="1" step="0.05" value="1" style="width: 60px; accent-color: var(--accent); cursor: pointer;" oninput="updateVolume(this.value)">
+                            </div>
+
+                            <button class="btn" onclick="skip(-10)" title="Back 10s">⟲</button>
+                            <button class="btn" onclick="skip(10)" title="Forward 10s">⟳</button>
+                            <button class="btn speed-btn" onclick="changeSpeed()" id="speedDisplay">1.0x</button>
+                            <button class="btn" onclick="togglePiP()" title="Mini Player">🖼️</button>
+                            <button class="btn" onclick="toggleFullscreen()" title="Fullscreen">⛶</button>
+                            <button class="btn" onclick="toggleTheater()" title="Theater Mode">📺</button>
+                            <div style="font-size:13px; flex-grow: 1; color: white;"><span id="curTime">0:00</span> / <span id="durTime">0:00</span></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <button onclick="closePlayer()" style="background: var(--card-bg); color: var(--accent); border: none; font-size: 28px; padding: 0 10px; cursor: pointer; border-radius: 8px;">←</button>
+                        <div>
+                            <h2 id="playingTitle" style="margin:0; font-size:22px;"></h2>
+                            <span style="font-size:12px; color:var(--secondary);" id="viewCount"></span>
+                        </div>
+                    </div>
+                    <button onclick="shareVideo()" style="background:var(--card-bg); color:var(--text); border:1px solid #555; padding:8px 16px; border-radius:20px; cursor:pointer;">🔗 Share</button>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="sidebar-search-box">
+                    <input type="text" id="sidebarSearch" placeholder="Search to watch next..." onkeyup="if(event.key === 'Enter') searchSidebar()">
+                    <button class="search-btn" onclick="searchSidebar()" style="border-radius:8px;">🔍</button>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span class="sidebar-title">Up Next</span>
+                    <label style="font-size:12px; color:var(--secondary); cursor:pointer;">Autoplay <input type="checkbox" id="autoplay" checked></label>
+                </div>
+                <div id="relatedGrid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADMIN PANEL -->
+    <div id="adminModal" class="modal">
+        <span class="close-btn" onclick="closeAdmin()">&times;</span>
+        <div style="max-width: 700px; margin: 120px auto; background: var(--card-bg); border-radius: 12px; padding: 30px; box-shadow: 0 0 30px rgba(0,0,0,0.6);">
+            <h2 style="margin:0 0 10px; color: var(--accent);">🔑 Admin Panel</h2>
+            <p style="color: var(--secondary); margin-bottom: 20px;">Paste video details in this exact format:<br>
+            <small>url,title(tag1,tag2,tag3);url2,title2(tag4);url3,title3</small></p>
+            <textarea id="adminInput" rows="8" style="width:100%; background: var(--bg); color: var(--text); border: 1px solid #444; border-radius: 8px; padding: 15px; resize: vertical; font-family: monospace;"></textarea>
+            <div style="margin-top: 20px; text-align: right;">
+                <button onclick="closeAdmin()" style="background: #333; color: white; border: none; padding: 10px 20px; border-radius: 8px; margin-right: 10px; cursor: pointer;">Cancel</button>
+                <button onclick="addVideosFromAdmin()" style="background: var(--accent); color: white; border: none; padding: 10px 30px; border-radius: 8px; cursor: pointer;">ADD VIDEOS</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA (persisted with tags support) ---
+        let videoList = JSON.parse(localStorage.getItem('videoList')) || [
+            { id: 1, title: "Class 10 NCERT: Control & Coordination", url: "https://www.w3schools.com/html/mov_bbb.mp4", tags: ["Biology", "Education"] },
+            { id: 2, title: "Playwright Web Automation Masterclass", url: "https://www.w3schools.com/html/movie.mp4", tags: ["Coding", "Tech"] },
+            { id: 3, title: "JEE Mains 2026: Difficulty Analysis", url: "https://www.w3schools.com/html/mov_bbb.mp4", tags: ["JEE", "Education"] },
+            { id: 4, title: "Flask Stealth Proxy Tutorial", url: "https://www.w3schools.com/html/movie.mp4", tags: ["Coding", "Development"] },
+            { id: 5, title: "Human Brain Anatomy (Forebrain vs Hindbrain)", url: "https://www.w3schools.com/html/mov_bbb.mp4", tags: ["Biology", "Science"] },
+            { id: 6, title: "Funny Animal Fails", url: "https://www.w3schools.com/html/movie.mp4", tags: ["Funny"] },
+            { id: 7, title: "Plant Physiology & Reproduction", url: "https://www.w3schools.com/html/mov_bbb.mp4", tags: ["Biology", "Nature"] },
+            { id: 8, title: "Cyberpunk City Drive 4K", url: "https://www.w3schools.com/html/movie.mp4", tags: ["Sci-Fi", "Action"] },
+            { id: 9, title: "Python Web Scraping Pro", url: "https://www.w3schools.com/html/mov_bbb.mp4", tags: ["Coding", "Tech"] },
+            { id: 10, title: "Forest Rain ASMR", url: "https://www.w3schools.com/html/movie.mp4", tags: ["Nature", "Relaxing"] },
+            { id: 11, title: "JEE Maths: Calculus Hacks", url: "https://www.w3schools.com/html/mov_bbb.mp4", tags: ["JEE", "Education"] },
+            { id: 12, title: "Neuron Structure Explained", url: "https://www.w3schools.com/html/movie.mp4", tags: ["Biology", "Science"] },
+            { id: 13, title: "JavaScript Game Engine", url: "https://www.w3schools.com/html/mov_bbb.mp4", tags: ["Coding", "Development"] },
+            { id: 14, title: "Mountain Peak Drone Footage", url: "https://www.w3schools.com/html/movie.mp4", tags: ["Nature"] },
+            { id: 15, title: "Class 10 English: Anne Frank Sketch", url: "https://www.w3schools.com/html/mov_bbb.mp4", tags: ["Education"] },
+            { id: 16, title: "Tech Gadget Review 2026", url: "https://www.w3schools.com/html/movie.mp4", tags: ["Tech"] },
+            { id: 17, title: "Space Nebula 4K", url: "https://www.w3schools.com/html/mov_bbb.mp4", tags: ["Science"] },
+            { id: 18, title: "Cat Moments Compilation", url: "https://www.w3schools.com/html/movie.mp4", tags: ["Funny"] },
+            { id: 19, title: "CSS Animation Masterclass", url: "https://www.w3schools.com/html/mov_bbb.mp4", tags: ["Coding", "Development"] },
+            { id: 20, title: "Quantum Physics for Beginners", url: "https://www.w3schools.com/html/movie.mp4", tags: ["Science", "Education"] }
+        ];
+
+        let currentTab = "All";
+        let currentPlayingId = null;
+        let nextVideoId = null;
+        let piPObserver = null;
+        const vid = document.getElementById('mainVideo');
+        const playBtn = document.getElementById('playBtn');
+
+        // === ADMIN & PERSISTENCE FUNCTIONS ===
+        function saveVideos() {
+            localStorage.setItem('videoList', JSON.stringify(videoList));
+        }
+
+        function populateCategories() {
+            let tags = ["All", "Latest"]; 
+            videoList.forEach(v => v.tags.forEach(t => { if(!tags.includes(t)) tags.push(t); }));
+            const bar = document.getElementById('catBar');
+            bar.innerHTML = tags.map(t => `<button class="cat-btn ${t===currentTab?'active':''}" onclick="setTab('${t}', this)">${t}</button>`).join('');
+        }
+
+        function openAdmin() {
+            document.getElementById('adminModal').style.display = "block";
+        }
+
+        function closeAdmin() {
+            document.getElementById('adminModal').style.display = "none";
+            document.getElementById('adminInput').value = '';
+        }
+
+        function addVideosFromAdmin() {
+            const input = document.getElementById('adminInput').value.trim();
+            if (!input) {
+                alert("Please enter videos in the format:\nurl,title(tag1,tag2);url2,title2");
+                return;
+            }
+            const entries = input.split(';').map(e => e.trim()).filter(Boolean);
+            let addedCount = 0;
+            let maxId = videoList.length ? Math.max(...videoList.map(v => v.id)) : 0;
+
+            entries.forEach(entry => {
+                if (!entry.includes(',')) return;
+                const commaIndex = entry.indexOf(',');
+                const url = entry.substring(0, commaIndex).trim();
+                let rest = entry.substring(commaIndex + 1).trim();
+
+                let title = rest;
+                let tags = ["Added"];
+
+                const openParen = rest.indexOf('(');
+                const closeParen = rest.lastIndexOf(')');
+                if (openParen > 0 && closeParen > openParen) {
+                    title = rest.substring(0, openParen).trim();
+                    const tagStr = rest.substring(openParen + 1, closeParen).trim();
+                    tags = tagStr.split(',').map(t => t.trim()).filter(Boolean);
+                    if (tags.length === 0) tags = ["Added"];
+                }
+
+                if (url && title && url.startsWith('http')) {
+                    maxId++;
+                    videoList.push({ id: maxId, title: title, url: url, tags: tags });
+                    addedCount++;
+                }
+            });
+
+            if (addedCount > 0) {
+                saveVideos();
+                populateCategories();
+                updateMainGrid();
+                alert(`${addedCount} video(s) added successfully!\nNew videos appear first in "Latest" tab.`);
+            } else {
+                alert("No valid videos added.\n\nCorrect format example:\nhttps://example.com/1.mp4,My Video(Tech,Education);https://example.com/2.mp4,Next Video(Funny)");
+            }
+            closeAdmin();
+        }
+
+        function init() {
+            showSkeletons();
+            setTimeout(() => {
+                populateCategories();
+                const params = new URLSearchParams(window.location.search);
+                const videoId = params.get('v');
+                updateMainGrid();
+                if(videoId) openPlayer(parseInt(videoId));
+            }, 800);
+        }
+
+        function showSkeletons() {
+            document.getElementById('videoGrid').innerHTML = Array(8).fill(0).map(() => `
+                <div class="card"><div class="video-prev skeleton"></div><div class="info"><div class="skeleton" style="height:20px; width:80%; border-radius:4px;"></div></div></div>
+            `).join('');
+        }
+
+        function toggleTheme() { document.body.classList.toggle('light-mode'); }
+
+        function setTab(t, btn) {
+            currentTab = t;
+            document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            updateMainGrid();
+        }
+
+        // MAIN GRID SEARCH + RANDOM FOR "ALL" + LATEST SORT
+        function updateMainGrid() {
+            const searchInput = document.getElementById('mainSearchBar');
+            const search = searchInput.value.trim();
+            
+            // SECRET ADMIN TRIGGER
+            if (search === '123@Admin#') {
+                searchInput.value = '';
+                openAdmin();
+                return;
+            }
+
+            // Close player if open when searching
+            const modal = document.getElementById('videoModal');
+            if (modal.style.display === "block") {
+                closePlayer();
+            }
+
+            let filtered = videoList.filter(v => v.title.toLowerCase().includes(search.toLowerCase()));
+
+            if (currentTab === "Latest") {
+                filtered.sort((a, b) => b.id - a.id);           // newest first
+            } else if (currentTab === "All") {
+                filtered = filtered.sort(() => Math.random() - 0.5); // RANDOM arrangement for All
+            } else {
+                filtered = filtered.filter(v => v.tags.includes(currentTab));
+            }
+
+            renderGrid(filtered);
+        }
+
+        function renderGrid(data) {
+            const grid = document.getElementById('videoGrid');
+            grid.innerHTML = data.map(v => `
+                <div class="card" onclick="openPlayer(${v.id})">
+                    <div class="video-prev">
+                        <video class="mini" loop onmouseenter="this.play(); this.muted=false" onmouseleave="this.pause(); this.muted=true" muted>
+                            <source src="${v.url}" type="video/mp4">
+                        </video>
+                    </div>
+                    <div class="info"><p class="title">${v.title}</p></div>
+                </div>
+            `).join('');
+        }
+
+        // PLAYER LOGIC + AUTO PiP ON SCROLL (only when <40% visible)
+        function openPlayer(id) {
+            const v = videoList.find(x => x.id === id);
+            if(!v) return;
+            currentPlayingId = id;
+            vid.src = v.url;
+            document.getElementById('playingTitle').innerText = v.title;
+            document.getElementById('viewCount').innerText = Math.floor(Math.random() * 50000 + 1000).toLocaleString() + " views";
+            document.getElementById('videoModal').style.display = "block";
+            
+            window.history.pushState({}, '', `?v=${id}`); 
+            vid.play();
+            playBtn.innerText = "⏸";
+            renderRelated(videoList.filter(item => item.id !== id));
+
+            // Setup auto PiP observer
+            setupPiPObserver();
+        }
+
+        function setupPiPObserver() {
+            const playerSection = document.querySelector('.main-player-section');
+            if (!playerSection) return;
+
+            if (piPObserver) piPObserver.disconnect();
+
+            piPObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    const modalVisible = document.getElementById('videoModal').style.display === "block";
+                    if (modalVisible && !vid.paused) {
+                        if (entry.intersectionRatio < 0.4) {
+                            if (!document.pictureInPictureElement) {
+                                vid.requestPictureInPicture().catch(() => {});
+                            }
+                        } else {
+                            if (document.pictureInPictureElement) {
+                                document.exitPictureInPicture().catch(() => {});
+                            }
+                        }
+                    }
+                });
+            }, { threshold: 0.4 });
+
+            piPObserver.observe(playerSection);
+        }
+
+        // SIDEBAR SEARCH LOGIC
+        function searchSidebar() {
+            const term = document.getElementById('sidebarSearch').value.toLowerCase();
+            const filtered = videoList.filter(v => v.id !== currentPlayingId && v.title.toLowerCase().includes(term));
+            renderRelated(filtered);
+        }
+
+        function renderRelated(list) {
+            nextVideoId = list[0]?.id || null;
+            document.getElementById('relatedGrid').innerHTML = list.slice(0, 10).map(v => `
+                <div class="side-card" onclick="openPlayer(${v.id})">
+                    <div class="side-thumb"><video muted><source src="${v.url}"></video></div>
+                    <div style="overflow:hidden;">
+                        <p class="side-title" style="color:var(--text)">${v.title}</p>
+                        <span style="font-size:10px; color:var(--secondary)">${v.tags[0]}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // CONTROLS
+        function togglePlay() { vid.paused ? vid.play() : vid.pause(); playBtn.innerText = vid.paused ? "▶" : "⏸"; }
+        
+        function updateVolume(val) {
+            vid.volume = val; vid.muted = (val == 0);
+            document.getElementById('muteBtn').innerText = val == 0 ? "🔇" : "🔊";
+        }
+        function toggleMute() {
+            vid.muted = !vid.muted;
+            const slider = document.getElementById('volSlider');
+            document.getElementById('muteBtn').innerText = vid.muted ? "🔇" : "🔊";
+            slider.value = vid.muted ? 0 : (vid.volume || 1);
+        }
+
+        function changeSpeed() {
+            let current = Number(vid.playbackRate);
+            let nextSpeed;
+            if (current === 1.0) nextSpeed = 1.5;
+            else if (current === 1.5) nextSpeed = 2.0;
+            else if (current === 2.0) nextSpeed = 0.5;
+            else nextSpeed = 1.0;
+            
+            vid.playbackRate = nextSpeed;
+            document.getElementById('speedDisplay').innerText = nextSpeed.toFixed(1) + "x";
+        }
+
+        function toggleTheater() { document.getElementById('modalBody').classList.toggle('theater'); }
+        function toggleFullscreen() { document.getElementById('pWrapper').requestFullscreen(); }
+        function togglePiP() { 
+            if (document.pictureInPictureElement) document.exitPictureInPicture();
+            else vid.requestPictureInPicture(); 
+        }
+        
+        function shareVideo() {
+            navigator.clipboard.writeText(window.location.href);
+            alert("Video Link Copied!");
+            document.getElementById('customMenu').style.display = 'none';
+        }
+
+        function closePlayer() {
+            document.getElementById('videoModal').style.display = "none";
+            document.getElementById('modalBody').classList.remove('theater');
+            document.getElementById('sidebarSearch').value = "";
+            window.history.pushState({}, '', window.location.pathname);
+            vid.pause(); vid.src = "";
+            currentPlayingId = null;
+
+            if (piPObserver) {
+                piPObserver.disconnect();
+                piPObserver = null;
+            }
+            if (document.pictureInPictureElement) {
+                document.exitPictureInPicture().catch(() => {});
+            }
+        }
+
+        // GESTURES
+        let lastTap = 0;
+        let touchStartX = 0; let touchStartY = 0;
+        const pWrapper = document.getElementById('pWrapper');
+
+        pWrapper.addEventListener('click', (e) => {
+            const now = Date.now();
+            if (now - lastTap < 300) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                x < rect.width / 2 ? skip(-10) : skip(10);
+            } else {
+                setTimeout(() => { if(Date.now() - lastTap >= 300) togglePlay(); }, 305);
+            }
+            lastTap = now;
+        });
+
+        pWrapper.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, {passive: true});
+
+        pWrapper.addEventListener('touchend', e => {
+            let touchEndX = e.changedTouches[0].screenX;
+            let touchEndY = e.changedTouches[0].screenY;
+            handleSwipe(touchStartX, touchStartY, touchEndX, touchEndY);
+        }, {passive: true});
+
+        function handleSwipe(startX, startY, endX, endY) {
+            let diffX = endX - startX;
+            let diffY = endY - startY;
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+                if (Math.abs(diffX) > 50) diffX > 0 ? skip(10) : skip(-10);
+            } else {
+                if (Math.abs(diffY) > 50) {
+                    let newVol = vid.volume + (diffY > 0 ? -0.2 : 0.2);
+                    newVol = Math.max(0, Math.min(1, newVol));
+                    updateVolume(newVol);
+                    document.getElementById('volSlider').value = newVol;
+                }
+            }
+        }
+
+        function skip(time) { 
+            vid.currentTime += time; 
+            const id = time > 0 ? 'seekRight' : 'seekLeft';
+            const overlay = document.getElementById(id);
+            overlay.style.opacity = "1";
+            setTimeout(() => overlay.style.opacity = "0", 400);
+        }
+
+        // PROGRESS & BUFFERING
+        vid.onwaiting = () => document.getElementById('buffer').style.display = 'block';
+        vid.onplaying = () => document.getElementById('buffer').style.display = 'none';
+        vid.onended = () => { if(document.getElementById('autoplay').checked && nextVideoId) openPlayer(nextVideoId); };
+
+        vid.ontimeupdate = () => {
+            const pct = (vid.currentTime / vid.duration) * 100;
+            document.getElementById('pFill').style.width = pct + "%";
+            document.getElementById('curTime').innerText = formatTime(vid.currentTime);
+            document.getElementById('durTime').innerText = formatTime(vid.duration || 0);
+        };
+
+        document.getElementById('pContainer').onclick = (e) => {
+            e.stopPropagation(); 
+            vid.currentTime = (e.offsetX / e.target.offsetWidth) * vid.duration;
+        };
+
+        function formatTime(s) {
+            if (isNaN(s)) return "0:00";
+            let m = Math.floor(s / 60);
+            let sec = Math.floor(s % 60);
+            return m + ":" + (sec < 10 ? "0" + sec : sec);
+        }
+
+        // CUSTOM CONTEXT MENU
+        function showMenu(e) {
+            e.preventDefault();
+            const menu = document.getElementById('customMenu');
+            menu.style.display = 'block';
+            menu.style.left = e.pageX + 'px';
+            menu.style.top = e.pageY + 'px';
+        }
+        window.onclick = (e) => { if(!e.target.closest('#customMenu')) document.getElementById('customMenu').style.display = 'none'; };
+
+        init();
+    </script>
+</body>
+</html>
